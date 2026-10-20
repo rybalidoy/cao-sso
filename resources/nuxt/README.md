@@ -1,26 +1,44 @@
 # Nuxt client integration (CAO SSO)
 
-This folder holds the frontend pieces needed for the SSO handoff to work
-reliably in a Nuxt SPA. Copy them into your app and wire them in as described.
+This folder holds the **frontend pieces** for the SSO handoff. Nothing here is
+applied automatically: the package never edits your pages, stores, router, or
+`nuxt.config.ts`. **You copy the files and wire them in yourself.** This keeps
+the integration opt-in and easy to review, and makes it portable across systems.
 
-The backend package logs the user in on the **server** and redirects the
-browser back to the SPA. That is a **full page load**, so the in-memory/Pinia
-auth store starts empty. Two things are required:
+## Why anything is needed at all
+
+The backend package logs the user in on the **server** and redirects the browser
+back to the SPA. That is a **full page load**, so the in-memory/Pinia auth store
+starts empty even though the session cookie is present. Without help, the router
+guard sees `isLoggedIn === false` and bounces the freshly logged-in user back to
+`/login`. So two frontend steps are required:
 
 1. **Hydrate the auth store from the server session** before any auth decision.
-2. **Make the route guard await hydration** so it does not bounce the user to
-   `/login` before the session is checked.
+2. **Make the route guard await hydration** before deciding access.
 
-## 1. Hydration composable
+Everything else (login page, logout target, direct-access gate) is optional and
+described below, in increasing order of opinion.
 
-Copy `composables/useSessionHydration.ts` into `app/composables/`. It calls
-`GET /auth/permissions` once per page load and populates your auth store.
+## Files in this folder
+
+| File | Purpose | Required? |
+| --- | --- | --- |
+| `composables/useSessionHydration.ts` | Hydrate the store from the session; `redirectToCaoHome()` helper. | Yes |
+| `components/CaoSsoLogin.vue` | Drop-in login screen that auto-redirects to CAO. | Optional |
 
 > Adjust the import names (`useAuthStore`, the store's `setUser`, the `$api`
-> plugin) to match your app. The example assumes an auth store with
+> plugin) to match your app. The examples assume an auth store with
 > `setUser(data)` and an `isLoggedIn` getter.
 
-## 2. Hydrate on init
+---
+
+## 1. (Required) Hydration composable
+
+Copy `composables/useSessionHydration.ts` into `app/composables/`. It calls
+`GET /auth/permissions` once per page load and populates your auth store. The
+single-flight `hydration` promise means multiple callers share one request.
+
+## 2. (Required) Hydrate on init
 
 In your init plugin (e.g. `app/plugins/04.init.client.ts`), hydrate before
 loading other data:
@@ -40,7 +58,7 @@ try {
 }
 ```
 
-## 3. Await hydration in the route guard
+## 3. (Required) Await hydration in the route guard
 
 In your route guard (e.g. `app/routes/settings.ts`), await hydration **before**
 deciding access:
@@ -62,20 +80,63 @@ export const guard = async (to, from) => {
 };
 ```
 
-## 4. Direct access — no session sends the visitor to CAO
+That is the minimum for a working SSO redirect. The rest is opt-in.
 
-Once CAO is the single sign-on authority, the SPA should not be usable without a
-session, and it should not show a local form either. Add a gate in the guard:
-after hydration, if there is **no** session and the route is not an
-auth-utility route, send the browser to the **CAO frontend** home.
+---
 
-- Direct hit to the SPA (root, deep link, refresh) with no session → CAO frontend.
-- Arriving back from CAO (SSO callback) → session exists → app proceeds normally.
-- Already signed out at CAO → the CAO frontend lets them sign in again.
+## 4. (Optional) Login page — use the drop-in component
+
+`components/CaoSsoLogin.vue` is a full-screen "Redirecting to CAO…" screen. It
+sends the browser to the package's SSO route on mount, so there is **no local
+form**. To adopt it you only change **your** route definition — the component
+does not touch anything else:
 
 ```ts
-// routes/settings.ts
-import { hydrateAuthSession, redirectToCaoHome } from "~/composables/useSessionHydration";
+// app/routes/index.ts
+{
+  path: "/login",
+  name: "login",
+  component: () => import("@/components/CaoSsoLogin.vue"),
+  meta: {
+    title: "Authentication",
+    requiresAuth: false,
+  },
+}
+```
+
+> **Keep the route name (`login`) and its `meta` unchanged.** Your guard
+> redirects unauthenticated users to the named `login` route; only the component
+> changes. Do not delete the route.
+
+### Prefer to keep your existing form?
+
+Leave `login.vue` untouched and just add an SSO button, so local passwords keep
+working during a migration:
+
+```vue
+<script setup lang="ts">
+const loginWithCao = () => {
+  const config = useRuntimeConfig();
+  window.location.href = `${config.public.baseUrl}/auth/sso/cao`;
+};
+</script>
+
+<template>
+  <TButton label="Login with CAO SSO" @click="loginWithCao" />
+</template>
+```
+
+## 5. (Optional) Direct access — no session sends the visitor to CAO
+
+By default a signed-out visitor sees your login page. If instead you want the
+SPA to bounce straight to the **CAO frontend** home on a direct hit (root, deep
+link, refresh), add a gate at the top of the guard, after hydration:
+
+```ts
+import {
+  hydrateAuthSession,
+  redirectToCaoHome,
+} from "~/composables/useSessionHydration";
 
 /**
  * Routes that stay reachable while signed out. Everything else redirects to the
@@ -131,86 +192,14 @@ $router.beforeEach(async (to, from, next) => {
 });
 ```
 
-`redirectToCaoHome()` lives next to the hydration composable and uses the same
-`caoFrontendUrl` runtime config (see section 6):
-
-```ts
-export const redirectToCaoHome = (): string => {
-  const config = useRuntimeConfig();
-  const url = config.public.caoFrontendUrl || "http://127.0.0.1:3000";
-  if (import.meta.client) {
-    window.location.href = url;
-  }
-  return url;
-};
-```
+`redirectToCaoHome()` ships in the hydration composable and uses the
+`caoFrontendUrl` runtime config (see section 6).
 
 > Bouncing to the CAO **frontend** (home) is deliberate: a direct visit is not a
 > login attempt, so the visitor lands on CAO rather than being pushed straight
-> into an OAuth handshake. The `/login` route still exists and starts SSO for any
-> code path that explicitly routes there.
+> into an OAuth handshake. The `/login` route still starts SSO when routed to.
 
-## 5. Login button
-
-To let users start the flow from the SPA as well, add a button that sends the
-browser to the package's login route:
-
-```vue
-<script setup lang="ts">
-const loginWithCao = () => {
-  const config = useRuntimeConfig();
-  window.location.href = `${config.public.baseUrl}/auth/sso/cao`;
-};
-</script>
-
-<template>
-  <TButton label="Login with CAO SSO" @click="loginWithCao" />
-</template>
-```
-
-## 6. Login page — auto-redirect to CAO
-
-When CAO is the **only** way to authenticate, the local login form is redundant.
-Two options are supported; both keep the `/login` **route** (so the router
-guard's `reject({ name: "login" })` still resolves).
-
-### Option A — keep the form (dual mode)
-
-Leave your login page as-is and add the SSO button (section 5 above). Useful
-during a migration where some users still have local passwords.
-
-### Option B — auto-redirect, no form (recommended once SSO is the only path)
-
-Replace the page body with a minimal component that sends the browser to CAO on
-mount. No form is rendered.
-
-```vue
-<script setup lang="ts">
-// CAO is the single sign-on provider; there is no local form.
-const config = useRuntimeConfig();
-
-const redirectToCao = () => {
-  window.location.href = `${config.public.baseUrl}/auth/sso/cao`;
-};
-
-onMounted(redirectToCao);
-</script>
-
-<template>
-  <div class="flex flex-col items-center gap-4 text-center">
-    <TIcon name="tabler:loader-2" class="size-8 animate-spin text-primary" />
-    <div class="text-2xl font-bold">Redirecting</div>
-    <span class="text-muted text-sm">Taking you to CAO to sign in&hellip;</span>
-    <TButton label="Continue to CAO SSO" @click="redirectToCao" />
-  </div>
-</template>
-```
-
-> **Do not delete the login route.** The guard redirects unauthenticated users
-> to the named `login` route; if the route is missing, navigation fails instead
-> of starting the SSO flow. Keep the route and change the component.
-
-## 7. Logout — return to the CAO frontend
+## 6. (Optional) Logout — return to the CAO frontend
 
 Because CAO is the SSO authority, a local logout must send the browser to the
 CAO frontend (its home page). Simply reloading the app would bounce the user

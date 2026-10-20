@@ -122,26 +122,31 @@ app to always initiate the login.
 ## Frontend (Nuxt)
 
 The `resources/nuxt/` folder contains the client-side pieces needed for a smooth
-handoff. See [`resources/nuxt/README.md`](resources/nuxt/README.md) for the full,
-copy-paste guide, which covers:
+handoff. **Nothing there is applied automatically — the package never edits your
+pages, stores, router, or `nuxt.config.ts`.** Copy the files and wire them in
+yourself. See [`resources/nuxt/README.md`](resources/nuxt/README.md) for the
+full, copy-paste guide.
 
-1. **Session hydration** — populate the auth store from the server session after
-   the SSO redirect (a full page load).
-2. **Route guard** — await hydration before deciding access, so the freshly
-   logged-in user is not bounced to `/login`.
-3. **Direct-access gate** — with no session, redirect the visitor to the CAO
-   frontend (any route except auth-utility ones). This makes the SPA unusable
-   without a session, without showing a local form.
-4. **Login page** — auto-redirect to CAO (no local form) once SSO is the only
-   path. Keep the `/login` **route**; only change the component.
-5. **Logout** — send the browser to the CAO frontend home, since reloading the
-   app would silently re-authenticate via SSO.
+The guide is ordered from required to optional:
+
+1. **(Required) Session hydration** — populate the auth store from the server
+   session after the SSO redirect (a full page load).
+2. **(Required) Route guard** — await hydration before deciding access, so the
+   freshly logged-in user is not bounced to `/login`.
+3. **(Optional) Login page** — swap your `login` route's component for the
+   drop-in `components/CaoSsoLogin.vue` (auto-redirects to CAO, no form). Or
+   keep your form and just add an SSO button.
+4. **(Optional) Direct-access gate** — with no session, redirect the visitor to
+   the CAO frontend (any route except auth-utility ones), so the SPA is unusable
+   while signed out, without showing a local form.
+5. **(Optional) Logout** — send the browser to the CAO frontend home, since
+   reloading the app would silently re-authenticate via SSO.
 
 Without (1) and (2), the SPA's route guard runs while the store is still empty
-and bounces the freshly logged-in user back to `/login`. Without (3), the SPA is
-reachable while signed out. Note the difference between (3) and (4): a *direct*
-visit goes to the CAO **frontend** home, whereas the `/login` route initiates an
-OAuth handshake (`/auth/sso/cao`).
+and bounces the freshly logged-in user back to `/login`. Note the difference
+between (3) and (4): the `/login` route initiates an OAuth handshake
+(`/auth/sso/cao`), whereas a *direct* visit to a guarded route goes to the CAO
+**frontend** home.
 
 ## Security notes
 
@@ -159,8 +164,9 @@ This package is meant to be applied to multiple systems. For each new system:
 3. `composer require cao/laravel-cao-sso` in the API and set the `CAO_SSO_*`
    env vars (see [Configuration](#configuration)).
 4. `php artisan vendor:publish --tag=cao-sso && php artisan migrate`.
-5. Apply the five Nuxt steps in [`resources/nuxt/README.md`](resources/nuxt/README.md)
-   (hydration, guard, direct-access gate, login page, logout).
+5. Wire up the Nuxt client in [`resources/nuxt/README.md`](resources/nuxt/README.md)
+   — required: hydration + guard; optional: login component, direct-access gate,
+   logout. Nothing is applied automatically; you copy the files yourself.
 6. Per environment, set the correct URLs:
    - `CAO_SSO_AUTHORIZE_URL` / `CAO_SSO_TOKEN_URL` / `CAO_SSO_USERINFO_URL`
      → the CAO **API** host (dev: `http://127.0.0.1:8002`).
