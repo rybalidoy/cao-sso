@@ -1,0 +1,44 @@
+{
+    "name": "cao/laravel-cao-sso",
+    "description": "CAO SSO client integration for Laravel applications (OAuth2 authorization-code via Laravel Socialite).",
+    "type": "library",
+    "version": "1.0.0",
+    "keywords": [
+        "laravel",
+        "sso",
+        "socialite",
+        "cao",
+        "oauth2"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "ryanbalidoy"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0",
+        "laravel/socialite": "^5.31"
+    },
+    "autoload": {
+        "psr-4": {
+            "Cao\\LaravelCaoSso\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Cao\\LaravelCaoSso\\CaoSsoServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
