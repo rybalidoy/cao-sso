@@ -80,6 +80,95 @@ const loginWithCao = () => {
 </template>
 ```
 
+## 4. Login page — auto-redirect to CAO
+
+When CAO is the **only** way to authenticate, the local login form is redundant.
+Two options are supported; both keep the `/login` **route** (so the router
+guard's `reject({ name: "login" })` still resolves).
+
+### Option A — keep the form (dual mode)
+
+Leave your login page as-is and add the SSO button (section 4 above). Useful
+during a migration where some users still have local passwords.
+
+### Option B — auto-redirect, no form (recommended once SSO is the only path)
+
+Replace the page body with a minimal component that sends the browser to CAO on
+mount. No form is rendered.
+
+```vue
+<script setup lang="ts">
+// CAO is the single sign-on provider; there is no local form.
+const config = useRuntimeConfig();
+
+const redirectToCao = () => {
+  window.location.href = `${config.public.baseUrl}/auth/sso/cao`;
+};
+
+onMounted(redirectToCao);
+</script>
+
+<template>
+  <div class="flex flex-col items-center gap-4 text-center">
+    <TIcon name="tabler:loader-2" class="size-8 animate-spin text-primary" />
+    <div class="text-2xl font-bold">Redirecting</div>
+    <span class="text-muted text-sm">Taking you to CAO to sign in&hellip;</span>
+    <TButton label="Continue to CAO SSO" @click="redirectToCao" />
+  </div>
+</template>
+```
+
+> **Do not delete the login route.** The guard redirects unauthenticated users
+> to the named `login` route; if the route is missing, navigation fails instead
+> of starting the SSO flow. Keep the route and change the component.
+
+## 5. Logout — return to the CAO frontend
+
+Because CAO is the SSO authority, a local logout must send the browser to the
+CAO frontend (its home page). Simply reloading the app would bounce the user
+straight back into SSO and silently sign them in again.
+
+The server route (`POST /auth/logout`) invalidates the session; the client then
+navigates to the CAO frontend URL.
+
+Add a public runtime config value (so it differs per environment):
+
+```ts
+// nuxt.config.ts
+runtimeConfig: {
+  public: {
+    caoFrontendUrl:
+      process.env.NUXT_PUBLIC_CAO_FRONTEND_URL || "http://127.0.0.1:3000",
+  },
+},
+```
+
+```dotenv
+# .env  (dev: CAO SPA is on :3000; prod: the CAO host)
+NUXT_PUBLIC_CAO_FRONTEND_URL="http://127.0.0.1:3000"
+```
+
+Then redirect there on logout:
+
+```ts
+const logout = async (): Promise<any> => {
+  const { $api } = useNuxtApp();
+  const config = useRuntimeConfig();
+
+  return new Promise((resolve, reject) => {
+    $api
+      .post("/auth/logout")
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        reset(); // clear the auth store
+        window.location.href =
+          config.public.caoFrontendUrl || "http://127.0.0.1:3000";
+      });
+  });
+};
+```
+
 ## Already signed in?
 
 When the SSO callback completes it redirects to `cao-sso.frontend_url`. From the

@@ -121,15 +121,43 @@ app to always initiate the login.
 
 ## Frontend (Nuxt)
 
-The `resources/nuxt/` folder contains the client-side pieces needed so the SPA
-hydrates from the server session after the SSO redirect. See
-[`resources/nuxt/README.md`](resources/nuxt/README.md).
+The `resources/nuxt/` folder contains the client-side pieces needed for a smooth
+handoff. See [`resources/nuxt/README.md`](resources/nuxt/README.md) for the full,
+copy-paste guide, which covers:
 
-Without this step, the SPA's route guard runs while the store is still empty and
-bounces the freshly logged-in user back to `/login`.
+1. **Session hydration** — populate the auth store from the server session after
+   the SSO redirect (a full page load).
+2. **Route guard** — await hydration before deciding access, so the freshly
+   logged-in user is not bounced to `/login`.
+3. **Login page** — auto-redirect to CAO (no local form) once SSO is the only
+   path. Keep the `/login` **route**; only change the component.
+4. **Logout** — send the browser to the CAO frontend home, since reloading the
+   app would silently re-authenticate via SSO.
+
+Without (1) and (2), the SPA's route guard runs while the store is still empty
+and bounces the freshly logged-in user back to `/login`.
 
 ## Security notes
 
 - Keep `CAO_SSO_CLIENT_SECRET` out of version control.
 - The callback runs in the `web` middleware group so it has session support.
 - The session id is regenerated on login (fixation protection).
+
+## Per-system rollout checklist
+
+This package is meant to be applied to multiple systems. For each new system:
+
+1. Register it as an SSO system in CAO and copy the `client_id` /
+   `client_secret`.
+2. Register the redirect URI (`{APP_URL}/api/auth/callback`) on that system.
+3. `composer require cao/laravel-cao-sso` in the API and set the `CAO_SSO_*`
+   env vars (see [Configuration](#configuration)).
+4. `php artisan vendor:publish --tag=cao-sso && php artisan migrate`.
+5. Apply the four Nuxt steps in [`resources/nuxt/README.md`](resources/nuxt/README.md)
+   (hydration, guard, login page, logout).
+6. Per environment, set the correct URLs:
+   - `CAO_SSO_AUTHORIZE_URL` / `CAO_SSO_TOKEN_URL` / `CAO_SSO_USERINFO_URL`
+     → the CAO **API** host (dev: `http://127.0.0.1:8002`).
+   - `CAO_SSO_FRONTEND_URL` → this system's SPA host.
+   - `NUXT_PUBLIC_CAO_FRONTEND_URL` (client) → the CAO **frontend** host
+     (dev: `http://127.0.0.1:3000`), used for post-logout redirects.
