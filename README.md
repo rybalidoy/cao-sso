@@ -129,13 +129,19 @@ copy-paste guide, which covers:
    the SSO redirect (a full page load).
 2. **Route guard** — await hydration before deciding access, so the freshly
    logged-in user is not bounced to `/login`.
-3. **Login page** — auto-redirect to CAO (no local form) once SSO is the only
+3. **Direct-access gate** — with no session, redirect the visitor to the CAO
+   frontend (any route except auth-utility ones). This makes the SPA unusable
+   without a session, without showing a local form.
+4. **Login page** — auto-redirect to CAO (no local form) once SSO is the only
    path. Keep the `/login` **route**; only change the component.
-4. **Logout** — send the browser to the CAO frontend home, since reloading the
+5. **Logout** — send the browser to the CAO frontend home, since reloading the
    app would silently re-authenticate via SSO.
 
 Without (1) and (2), the SPA's route guard runs while the store is still empty
-and bounces the freshly logged-in user back to `/login`.
+and bounces the freshly logged-in user back to `/login`. Without (3), the SPA is
+reachable while signed out. Note the difference between (3) and (4): a *direct*
+visit goes to the CAO **frontend** home, whereas the `/login` route initiates an
+OAuth handshake (`/auth/sso/cao`).
 
 ## Security notes
 
@@ -153,8 +159,8 @@ This package is meant to be applied to multiple systems. For each new system:
 3. `composer require cao/laravel-cao-sso` in the API and set the `CAO_SSO_*`
    env vars (see [Configuration](#configuration)).
 4. `php artisan vendor:publish --tag=cao-sso && php artisan migrate`.
-5. Apply the four Nuxt steps in [`resources/nuxt/README.md`](resources/nuxt/README.md)
-   (hydration, guard, login page, logout).
+5. Apply the five Nuxt steps in [`resources/nuxt/README.md`](resources/nuxt/README.md)
+   (hydration, guard, direct-access gate, login page, logout).
 6. Per environment, set the correct URLs:
    - `CAO_SSO_AUTHORIZE_URL` / `CAO_SSO_TOKEN_URL` / `CAO_SSO_USERINFO_URL`
      → the CAO **API** host (dev: `http://127.0.0.1:8002`).

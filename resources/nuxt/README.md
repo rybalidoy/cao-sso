@@ -62,7 +62,95 @@ export const guard = async (to, from) => {
 };
 ```
 
-## 4. Login button
+## 4. Direct access — no session sends the visitor to CAO
+
+Once CAO is the single sign-on authority, the SPA should not be usable without a
+session, and it should not show a local form either. Add a gate in the guard:
+after hydration, if there is **no** session and the route is not an
+auth-utility route, send the browser to the **CAO frontend** home.
+
+- Direct hit to the SPA (root, deep link, refresh) with no session → CAO frontend.
+- Arriving back from CAO (SSO callback) → session exists → app proceeds normally.
+- Already signed out at CAO → the CAO frontend lets them sign in again.
+
+```ts
+// routes/settings.ts
+import { hydrateAuthSession, redirectToCaoHome } from "~/composables/useSessionHydration";
+
+/**
+ * Routes that stay reachable while signed out. Everything else redirects to the
+ * CAO frontend when there is no valid session.
+ */
+const UNAUTHENTICATED_ROUTES = new Set<string>([
+  "login", // initiates SSO when hit deliberately
+  "forgot-password",
+  "reset-password",
+  "verify", // email verification link
+  "unverified",
+  "401",
+  "403",
+  "404",
+]);
+
+export const guard = async (to, from) => {
+  const $auth = useAuthStore();
+  const guard = useGuard();
+
+  await hydrateAuthSession();
+
+  if (!$auth.isLoggedIn && !UNAUTHENTICATED_ROUTES.has(to.name as string)) {
+    redirectToCaoHome();
+    // Abort navigation: the browser is leaving the app, so do not also
+    // reject into /login (that would fight the full-page redirect).
+    return Promise.reject(false);
+  }
+
+  return new Promise((resolve, reject) => {
+    // ...rest of your guard...
+  });
+};
+```
+
+The guard rejects with `false` to mean "abort". Teach your guard plugin to
+translate that into `next(false)`, otherwise vue-router treats a redirect-shaped
+value as a navigation and can loop:
+
+```ts
+// plugins/03.routeGuard.ts
+$router.beforeEach(async (to, from, next) => {
+  try {
+    await guard(to, from);
+    next();
+  } catch (e: any) {
+    if (e === false) {
+      next(false); // external navigation in progress
+      return;
+    }
+    next(e);
+  }
+});
+```
+
+`redirectToCaoHome()` lives next to the hydration composable and uses the same
+`caoFrontendUrl` runtime config (see section 6):
+
+```ts
+export const redirectToCaoHome = (): string => {
+  const config = useRuntimeConfig();
+  const url = config.public.caoFrontendUrl || "http://127.0.0.1:3000";
+  if (import.meta.client) {
+    window.location.href = url;
+  }
+  return url;
+};
+```
+
+> Bouncing to the CAO **frontend** (home) is deliberate: a direct visit is not a
+> login attempt, so the visitor lands on CAO rather than being pushed straight
+> into an OAuth handshake. The `/login` route still exists and starts SSO for any
+> code path that explicitly routes there.
+
+## 5. Login button
 
 To let users start the flow from the SPA as well, add a button that sends the
 browser to the package's login route:
@@ -80,7 +168,7 @@ const loginWithCao = () => {
 </template>
 ```
 
-## 4. Login page — auto-redirect to CAO
+## 6. Login page — auto-redirect to CAO
 
 When CAO is the **only** way to authenticate, the local login form is redundant.
 Two options are supported; both keep the `/login` **route** (so the router
@@ -88,7 +176,7 @@ guard's `reject({ name: "login" })` still resolves).
 
 ### Option A — keep the form (dual mode)
 
-Leave your login page as-is and add the SSO button (section 4 above). Useful
+Leave your login page as-is and add the SSO button (section 5 above). Useful
 during a migration where some users still have local passwords.
 
 ### Option B — auto-redirect, no form (recommended once SSO is the only path)
@@ -122,7 +210,7 @@ onMounted(redirectToCao);
 > to the named `login` route; if the route is missing, navigation fails instead
 > of starting the SSO flow. Keep the route and change the component.
 
-## 5. Logout — return to the CAO frontend
+## 7. Logout — return to the CAO frontend
 
 Because CAO is the SSO authority, a local logout must send the browser to the
 CAO frontend (its home page). Simply reloading the app would bounce the user

@@ -31,3 +31,23 @@ export const hydrateAuthSession = (): Promise<boolean> => {
 
   return hydration;
 };
+
+/**
+ * Send the browser to the CAO frontend (the SSO provider home).
+ *
+ * Used when the SPA is opened directly (or refreshed) without a valid session:
+ * CAO is the single sign-on authority, so unauthenticated visitors belong on
+ * the CAO home rather than on a local login form.
+ *
+ * Returns the resolved target URL (useful for tests).
+ */
+export const redirectToCaoHome = (): string => {
+  const config = useRuntimeConfig();
+  const url = config.public.caoFrontendUrl || "http://127.0.0.1:3000";
+
+  if (import.meta.client) {
+    window.location.href = url;
+  }
+
+  return url;
+};
