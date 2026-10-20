@@ -21,18 +21,18 @@ return [
     | OAuth endpoints
     |--------------------------------------------------------------------------
     |
-    | The authorize/token/userinfo endpoints of the CAO server. Override these
-    | per environment (the values below match a local CAO instance on :8001).
+    | The authorize/token/userinfo endpoints of the CAO API server. Override
+    | these per environment (the values below match a local CAO API on :8002).
     |
     */
 
     'redirect' => env('CAO_SSO_REDIRECT_URI', env('APP_URL').'/api/auth/callback'),
 
-    'authorize_url' => env('CAO_SSO_AUTHORIZE_URL', 'http://127.0.0.1:8001/oauth/authorize'),
+    'authorize_url' => env('CAO_SSO_AUTHORIZE_URL', 'http://127.0.0.1:8002/oauth/authorize'),
 
-    'token_url' => env('CAO_SSO_TOKEN_URL', 'http://127.0.0.1:8001/oauth/token'),
+    'token_url' => env('CAO_SSO_TOKEN_URL', 'http://127.0.0.1:8002/oauth/token'),
 
-    'userinfo_url' => env('CAO_SSO_USERINFO_URL', 'http://127.0.0.1:8001/api/oauth/userinfo'),
+    'userinfo_url' => env('CAO_SSO_USERINFO_URL', 'http://127.0.0.1:8002/api/oauth/userinfo'),
 
     /*
     |--------------------------------------------------------------------------

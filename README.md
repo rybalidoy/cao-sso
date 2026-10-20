@@ -55,9 +55,9 @@ CAO_SSO_CLIENT_SECRET=
 
 # OAuth endpoints of the CAO server.
 CAO_SSO_REDIRECT_URI="${APP_URL}/api/auth/callback"
-CAO_SSO_AUTHORIZE_URL="http://127.0.0.1:8001/oauth/authorize"
-CAO_SSO_TOKEN_URL="http://127.0.0.1:8001/oauth/token"
-CAO_SSO_USERINFO_URL="http://127.0.0.1:8001/api/oauth/userinfo"
+CAO_SSO_AUTHORIZE_URL="http://127.0.0.1:8002/oauth/authorize"
+CAO_SSO_TOKEN_URL="http://127.0.0.1:8002/oauth/token"
+CAO_SSO_USERINFO_URL="http://127.0.0.1:8002/api/oauth/userinfo"
 
 # Where to send the browser after login (your SPA).
 CAO_SSO_FRONTEND_URL="http://127.0.0.1:8080"
