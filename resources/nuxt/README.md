@@ -108,6 +108,11 @@ does not touch anything else:
 > redirects unauthenticated users to the named `login` route; only the component
 > changes. Do not delete the route.
 
+The component also guards against a redirect loop: when the SSO callback fails it
+redirects to `/login?error=<code>` (`sso_state_mismatch`, `sso_user_mismatch`,
+`account_disabled`, `sso_failed`). The component detects `?error=` and, instead
+of auto-redirecting again, shows the message with a **Try again** button.
+
 ### Prefer to keep your existing form?
 
 Leave `login.vue` untouched and just add an SSO button, so local passwords keep
@@ -245,6 +250,27 @@ const logout = async (): Promise<any> => {
   });
 };
 ```
+
+> **Gotcha: remove any "kick to login" watcher.** If your auth store has a
+> watcher that reacts to `isLoggedIn` becoming `false` and pushes to the `login`
+> route (a common pattern for handling session expiry), it will race the logout
+> redirect: `reset()` flips `isLoggedIn`, the watcher navigates to `/login`, and
+> because `/login` auto-redirects to SSO the user is signed straight back in.
+>
+> Example of the offending code to delete (often in an init plugin):
+>
+> ```ts
+> watch(
+>   () => auth.isLoggedIn,
+>   (val) => {
+>     $router.push(val ? { name: "home" } : { name: "login" });
+>   },
+> );
+> ```
+>
+> The router guard already redirects unauthenticated users, and the SSO callback
+> lands on `frontend_url` (root), so this watcher is redundant once SSO is in
+> place. Removing it is what makes logout actually stick.
 
 ## Already signed in?
 
